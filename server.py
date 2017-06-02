@@ -1,12 +1,8 @@
 #! /usr/local/bin/python3
 from queue import Queue
 from socketserver import ThreadingMixIn, TCPServer, BaseRequestHandler
+from settings import *
 import json
-
-
-TCP_IP = 'localhost'
-TCP_PORT = 2017
-BUFFER_SIZE = 1024
 
 
 class Database():
@@ -21,7 +17,7 @@ class Database():
             return 0
 
 
-class ThreadedTCPRequestHandler(BaseRequestHandler):
+class Handler(BaseRequestHandler):
     def handle(self):
         msg = self.get_message()
         if msg['client_type'] == 'client':
@@ -64,15 +60,15 @@ class ThreadedTCPRequestHandler(BaseRequestHandler):
         self.request.sendall(bytes(json.dumps(msg), 'utf8'))
 
 
-class ThreadedTCPServer(ThreadingMixIn, TCPServer):
+class MainServer(ThreadingMixIn, TCPServer):
     def __init__(self, *args, **kwargs):
-        super(ThreadedTCPServer, self).__init__(*args, **kwargs)
+        super(MainServer, self).__init__(*args, **kwargs)
         self.db = Database()
         self.printer_queue = Queue()
 
 
 if __name__ == '__main__':
-    server = ThreadedTCPServer((TCP_IP, TCP_PORT), ThreadedTCPRequestHandler)
+    server = MainServer((SERVER_HOST, SERVER_PORT), Handler)
     ip, port = server.server_address
 
     server.serve_forever()
