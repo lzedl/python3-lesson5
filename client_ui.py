@@ -1,40 +1,43 @@
 #! /usr/local/bin/python3
-
-# UI Client 
-import socket 
 from tkinter import *
-
-host = 'localhost' 
-port = 2017
-BUFFER_SIZE = 1024 
-MESSAGE = "UI"
-
-root = Tk()
-root.title("Основной UI")
-root.minsize(380,300)
-root.resizable(width=False, height=False)
-labMoney = Label(root, text="Введите номер телефона:").grid(row=1, column=2 , padx=(10,0))
-
-entMsg = Entry(root, width=20)
-entMsg.grid(row=2, column=2, padx=(10,0))
-labMoney = Label(root, text="Внесено денег: 0").grid(row=8, column=2 , padx=(10,0))
-
-tcpClientA = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
-tcpClientA.connect((host, port))
-tcpClientA.sendall(bytes(MESSAGE, 'utf-8'))
+from client import Client
+from settings import *
 
 
-def sendMsg():
-	MESSAGE = entMsg.get()
-	tcpClientA.sendall(bytes("Phone " + MESSAGE, 'utf-8'))
+class MainWindow(Tk):
+    def __init__(self, *args, **kwargs):
+        super(MainWindow, self).__init__(*args, **kwargs)
 
-but = Button(root, text="Отправить", bg="white", fg="black", font="Arial", width=22,height=1,command=sendMsg).grid(row=4, column=2, padx=(1, 1))
+        self.title('Основной UI')
+        self.minsize(380, 300)
+        self.resizable(width=False, height=False)
 
-root.mainloop()
+        self.label = Label(self, text='Введите номер аккаунта:')
+        self.label.grid(row=1, column=2, padx=(10, 0))
+
+        self.account_edit = Entry(self, width=20)
+        self.account_edit.grid(row=2, column=2, padx=(10, 0))
+
+        self.money_btn = Button(self, text='Отправить',
+                                bg='white', fg='black',
+                                font='Arial', width=22, height=1,
+                                command=self.send_money)
+        self.money_btn.grid(row=4, column=2, padx=(1, 1))
+
+        self.client = Client(SERVER_HOST, SERVER_PORT)
+
+    def send_money(self):
+        self.client.send_message({
+            'method': 'add_payment',
+            'params': {'money': 10,
+                       'account': self.account_edit.get()}
+        })
 
 
-#    data = tcpClientA.recv(BUFFER_SIZE)
-#    print " Client2 received data:", data
-#    MESSAGE = raw_input("tcpClientA: Enter message to continue/ Enter exit:")
- 
-# tcpClientA.close()
+def main():
+    root = MainWindow()
+    root.mainloop()
+
+
+if __name__ == '__main__':
+    main()

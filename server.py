@@ -1,66 +1,78 @@
 #! /usr/local/bin/python3
+from queue import Queue
+from socketserver import ThreadingMixIn, TCPServer, BaseRequestHandler
+import json
 
-import socket 
-import threading
-import socketserver 
+
+TCP_IP = 'localhost'
+TCP_PORT = 2017
+BUFFER_SIZE = 1024
 
 
-class payTerm():
+class Database():
     def __init__(self):
-        self.Money = 0
-        self.Phone = '+7 000 000-00-00'
+        self.payments = []
 
-payment = payTerm()
-        
+    @property
+    def total_money(self):
+        if self.payments:
+            return sum(p['money'] for p in self.payments)
+        else:
+            return 0
 
-class ThreadedTCPRequestHandler(socketserver.BaseRequestHandler):
 
+class ThreadedTCPRequestHandler(BaseRequestHandler):
     def handle(self):
-        data = str(self.request.recv(1024), 'utf-8')
-        if data == 'Printer':
-            self.request.sendall(str(payment.Money))
-            self.request.sendall(str(payment.Phone))
+        msg = self.get_message()
+        if msg['client_type'] == 'client':
+            self.handle_client()
+        elif msg['client_type'] == 'printer':
+            self.handle_printer()
 
+    def handle_client(self):
         while True:
-            data = str(self.request.recv(1024), 'utf-8')
-            if not data:
+            msg = self.get_message()
+            if msg['method'] == 'get_total_money':
+                self.send_message(self.server.db.total_money)
+            elif msg['method'] == 'add_payment':
+                payment = {'money': msg['params']['money'],
+                           'account': msg['params']['account']}
+                print('Add payment: %s' % msg['params'])
+                self.server.db.payments.append(payment)
+                self.server.printer_queue.put(payment)
+            elif msg['method'] == 'exit':
                 break
-            elif data[0:5] == 'Phone':
-                payment.Phone = data[6:]
-                print("Указан номер телефона", payment.Phone)
-            elif data[0:5] == 'Money':
-                payment.Money = payment.Money + int(data[6:])
-                print("Внесенная сумма", payment.Money)
-            cur_thread = threading.current_thread()
-            print("Сервер получил сообщение:{}".format(data))
-            response = bytes("{}: {}".format(cur_thread.name, data), 'utf-8')
-            #self.request.sendall(response)
+
+    def handle_printer(self):
+        while True:
+            msg = self.server.printer_queue.get()
+            self.send_message(msg)
+            response = self.get_message()
+            if response['status'] != 'OK':
+                print('Printer status isn\'t OK')
+                break
+
+    def get_message(self):
+        try:
+            json_data = str(self.request.recv(BUFFER_SIZE), 'utf8')
+            return json.loads(json_data)
+        except:
+            print('Cant parse stream, exit connection...')
+            raise
+
+    def send_message(self, msg):
+        self.request.sendall(bytes(json.dumps(msg), 'utf8'))
 
 
-# Обратите внимание на использование класса-примеси ThreadingMixIn
-class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
-    """ 
-        Потоковый сервер. Достаточно создать класс без "внутренностей"
-    """
-    pass
+class ThreadedTCPServer(ThreadingMixIn, TCPServer):
+    def __init__(self, *args, **kwargs):
+        super(ThreadedTCPServer, self).__init__(*args, **kwargs)
+        self.db = Database()
+        self.printer_queue = Queue()
 
-if __name__ == "__main__":
 
-    TCP_IP = 'localhost' 
-    TCP_PORT = 2017 
-    BUFFER_SIZE = 1024 
-
+if __name__ == '__main__':
     server = ThreadedTCPServer((TCP_IP, TCP_PORT), ThreadedTCPRequestHandler)
     ip, port = server.server_address
 
-    # Start a thread with the server -- that thread will then start one
-    # more thread for each request
-    server_thread = threading.Thread(target=server.serve_forever)
-    # Exit the server thread when the main thread terminates
-    server_thread.daemon = True
-    server_thread.start()
-    print("Server loop running in thread:", server_thread.name)
-    while True:
-        pass
-    server.shutdown()
-    server.server_close()
+    server.serve_forever()
